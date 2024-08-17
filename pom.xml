@@ -20,20 +20,14 @@
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.3</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi</artifactId>
-            <version>5.2.3</version>
-        </dependency>
         
-        <!-- JDBC Driver for your database (example for MySQL) -->
+        <!-- JDBC Driver for PostgreSQL -->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.33</version>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.6.0</version> <!-- Ultima versione stabile disponibile -->
         </dependency>
         
         <!-- Add other dependencies if necessary -->
     </dependencies>
-
 </project>
