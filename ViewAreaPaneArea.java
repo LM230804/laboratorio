@@ -1,6 +1,6 @@
 package application;
 
-public class ViewAreaPane$Area {
+public class ViewAreaPaneArea {
    private int id;
    private String name;
    private String description;
