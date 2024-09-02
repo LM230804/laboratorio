@@ -1,17 +1,18 @@
 package application;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class CentroMonitoraggio {
-    public static final String EXCEL_FILE = "geonames-and-coordinates.xlsx";
+    private static final String DB_URL = "jdbc:postgresql://localhost:5432/nome_del_db"; // Replace with your PostgreSQL DB URL
+    private static final String DB_USER = "username"; // Replace with your PostgreSQL username
+    private static final String DB_PASSWORD = "password"; // Replace with your PostgreSQL password
 
     public static void registraCentroAree(String operatore) {
         Scanner scanner = new Scanner(System.in);
@@ -34,23 +35,22 @@ public class CentroMonitoraggio {
     }
 
     public static void visualizzaCentriMonitoraggio(String operatore) {
-        try (FileInputStream fileInputStream = new FileInputStream(new File(EXCEL_FILE));
-             Workbook workbook = new XSSFWorkbook(fileInputStream)) {
+        String query = "SELECT nomecentro, indirizzo FROM centrimonitoraggio WHERE operator_id = ?";
 
-            Sheet sheet = workbook.getSheetAt(0);
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, operatore);
+            ResultSet rs = stmt.executeQuery();
+
             System.out.println("Centri di Monitoraggio registrati per l'operatore " + operatore + ":");
-
-            for (Row row : sheet) {
-                Cell operatoreCell = row.getCell(3);
-                if (operatoreCell != null && operatoreCell.getStringCellValue().equals(operatore)) {
-                    System.out.println("Nome Centro: " + row.getCell(0).getStringCellValue());
-                    System.out.println("Indirizzo Fisico: " + row.getCell(1).getStringCellValue());
-                    System.out.println("Elenco Aree di Interesse: " + row.getCell(2).getStringCellValue());
-                    System.out.println();
-                }
+            while (rs.next()) {
+                System.out.println("Nome Centro: " + rs.getString("nomecentro"));
+                System.out.println("Indirizzo Fisico: " + rs.getString("indirizzo"));
+                System.out.println();
             }
 
-        } catch (IOException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
         }
     }
@@ -59,48 +59,44 @@ public class CentroMonitoraggio {
         String[] areeInteresse = elencoAreeInteresse.split(",");
         List<String> areeInteresseList = Arrays.asList(areeInteresse);
 
-        try (FileInputStream fileInputStream = new FileInputStream(new File(EXCEL_FILE));
-             Workbook workbook = new XSSFWorkbook(fileInputStream)) {
+        String query = "SELECT name FROM geonamesandcoordinates WHERE name = ?";
 
-            Sheet sheet = workbook.getSheetAt(0);
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
 
-            for (Row row : sheet) {
-                Cell areaCell = row.getCell(0); // Assuming area of interest name is in the first column
-                if (areaCell != null && areeInteresseList.contains(areaCell.getStringCellValue())) {
-                    return true;
+            for (String area : areeInteresseList) {
+                stmt.setString(1, area.trim());
+                ResultSet rs = stmt.executeQuery();
+
+                if (!rs.next()) {
+                    return false; // Area not found
                 }
             }
 
-        } catch (IOException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
+            return false;
         }
 
-        return false;
+        return true;
     }
 
     private static boolean salvaCentroMonitoraggio(String nomeCentro, String indirizzoFisico, String elencoAreeInteresse, String operatore) {
-        try (FileInputStream fileInputStream = new FileInputStream(new File(EXCEL_FILE));
-             Workbook workbook = new XSSFWorkbook(fileInputStream)) {
+        String insertQuery = "INSERT INTO centrimonitoraggio (nomecentro, indirizzo, operator_id) VALUES (?, ?, ?)";
 
-            Sheet sheet = workbook.getSheetAt(0);
-            int lastRowNum = sheet.getLastRowNum();
-            Row newRow = sheet.createRow(lastRowNum + 1);
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(insertQuery)) {
 
-            newRow.createCell(0).setCellValue(nomeCentro);
-            newRow.createCell(1).setCellValue(indirizzoFisico);
-            newRow.createCell(2).setCellValue(elencoAreeInteresse);
-            newRow.createCell(3).setCellValue(operatore);
-
-            try (FileOutputStream fileOutputStream = new FileOutputStream(new File(EXCEL_FILE))) {
-                workbook.write(fileOutputStream);
-            }
+            stmt.setString(1, nomeCentro);
+            stmt.setString(2, indirizzoFisico);
+            stmt.setString(3, operatore);
+            stmt.executeUpdate();
 
             return true;
 
-        } catch (IOException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
             return false;
         }
     }
 }
-
