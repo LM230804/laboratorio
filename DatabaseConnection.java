@@ -2,7 +2,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-public class provaconn {
+public class DatabaseConnection() {
     public static void main(String[] args) {
         // URL del database, formato: jdbc:postgresql://host:port/database
         String url = "jdbc:postgresql://localhost:5432/MAINDB";
