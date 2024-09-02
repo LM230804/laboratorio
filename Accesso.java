@@ -1,21 +1,15 @@
 package application;
 
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Iterator;
 import java.util.Scanner;
 
 public class Accesso {
-    private static final String EXCEL_FILE = "operatori-registrati.xlsx";
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/nome_del_db";
+    // Database connection settings for PostgreSQL
+    private static final String DB_URL = "jdbc:postgresql://localhost:5432/nome_del_db";
     private static final String DB_USER = "username";
     private static final String DB_PASSWORD = "password";
 
@@ -35,30 +29,24 @@ public class Accesso {
     }
 
     private static boolean verificaCredenziali(String userID, String password) {
-        try (FileInputStream fis = new FileInputStream(EXCEL_FILE);
-             Workbook workbook = new XSSFWorkbook(fis)) {
+        String query = "SELECT COUNT(*) FROM OperatoriRegistrati WHERE userID = ? AND password = ?";
 
-            Sheet sheet = workbook.getSheetAt(0);
-            Iterator<Row> rowIterator = sheet.iterator();
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
 
-            while (rowIterator.hasNext()) {
-                Row row = rowIterator.next();
-                Cell userIDCell = row.getCell(3);  // Assuming UserID is in the 4th column
-                Cell passwordCell = row.getCell(4);  // Assuming Password is in the 5th column
+            stmt.setString(1, userID);
+            stmt.setString(2, password);
 
-                if (userIDCell != null && passwordCell != null) {
-                    String excelUserID = userIDCell.getStringCellValue();
-                    String excelPassword = passwordCell.getStringCellValue();
-
-                    if (userID.equals(excelUserID) && password.equals(excelPassword)) {
-                        return true;
-                    }
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
                 }
             }
 
-        } catch (IOException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
         }
+
         return false;
     }
 
