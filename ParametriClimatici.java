@@ -1,18 +1,18 @@
 package application;
 
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
 public class ParametriClimatici {
-    public static final String XLSX_FILE_PATH = "centri-monitoraggio.xlsx";
+    private static final String DB_URL = "jdbc:postgresql://localhost:5432/nome_del_db"; // Update with your PostgreSQL DB URL
+    private static final String DB_USER = "username"; // Update with your PostgreSQL username
+    private static final String DB_PASSWORD = "password"; // Update with your PostgreSQL password
 
     public static void inserisciParametriClimatici(String operatore) {
         Scanner scanner = new Scanner(System.in);
@@ -26,50 +26,47 @@ public class ParametriClimatici {
             } else {
                 System.out.println("Geonames disponibili:");
 
-                int selectedGeonameIndex;
-                for (selectedGeonameIndex = 0; selectedGeonameIndex < geonames.size(); ++selectedGeonameIndex) {
-                    System.out.println(selectedGeonameIndex + 1 + ". " + geonames.get(selectedGeonameIndex));
+                for (int i = 0; i < geonames.size(); i++) {
+                    System.out.println((i + 1) + ". " + geonames.get(i));
                 }
 
-                selectedGeonameIndex = -1;
+                int selectedGeonameIndex = -1;
 
                 while (true) {
-                    do {
-                        System.out.print("Seleziona un geoname (1-" + geonames.size() + "): ");
-                        selectedGeonameIndex = scanner.nextInt();
-                        scanner.nextLine();
+                    System.out.print("Seleziona un geoname (1-" + geonames.size() + "): ");
+                    selectedGeonameIndex = scanner.nextInt();
+                    scanner.nextLine();
 
-                        if (selectedGeonameIndex >= 1 && selectedGeonameIndex <= geonames.size()) {
-                            String selectedGeoname = geonames.get(selectedGeonameIndex - 1);
+                    if (selectedGeonameIndex >= 1 && selectedGeonameIndex <= geonames.size()) {
+                        String selectedGeoname = geonames.get(selectedGeonameIndex - 1);
 
-                            if (!isParametroPresente(operatore, selectedGeoname)) {
-                                inserisciNuoviParametri(scanner, operatore, selectedGeoname);
-                                System.out.println("Parametri climatici inseriti con successo.");
-                            } else {
-                                System.out.println("Il parametro è già stato inserito.");
-                            }
-                            return;
+                        if (!isParametroPresente(operatore, selectedGeoname)) {
+                            inserisciNuoviParametri(scanner, operatore, selectedGeoname);
+                            System.out.println("Parametri climatici inseriti con successo.");
+                        } else {
+                            System.out.println("Il parametro è già stato inserito.");
                         }
+                        return;
+                    }
 
-                        System.out.println("Selezione non valida.");
-                    } while (true);
+                    System.out.println("Selezione non valida.");
                 }
             }
         }
     }
 
     private static boolean verificaOperatore(String operatore) {
-        try (FileInputStream fileInputStream = new FileInputStream(XLSX_FILE_PATH);
-             Workbook workbook = new XSSFWorkbook(fileInputStream)) {
-            Sheet sheet = workbook.getSheetAt(0);
+        String query = "SELECT * FROM operatoriregistrati WHERE operator_id = ?";
 
-            for (Row row : sheet) {
-                Cell operatoreCell = row.getCell(3); // Assuming 'operatore' is in the 4th column (index 3)
-                if (operatoreCell != null && operatoreCell.getStringCellValue().equals(operatore)) {
-                    return true;
-                }
-            }
-        } catch (IOException e) {
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, operatore);
+            ResultSet rs = stmt.executeQuery();
+
+            return rs.next();
+
+        } catch (SQLException e) {
             e.printStackTrace();
         }
         return false;
@@ -78,72 +75,68 @@ public class ParametriClimatici {
     private static List<String> getGeonames(String operatore) {
         List<String> geonames = new ArrayList<>();
 
-        try (FileInputStream fileInputStream = new FileInputStream(XLSX_FILE_PATH);
-             Workbook workbook = new XSSFWorkbook(fileInputStream)) {
-            Sheet sheet = workbook.getSheetAt(0);
+        String query = "SELECT geoname FROM centrimonitoraggio cm "
+                     + "JOIN geonamesandcoordinates gc ON cm.operator_id = ? "
+                     + "AND cm.nomecentro = gc.name";
 
-            for (Row row : sheet) {
-                Cell operatoreCell = row.getCell(3); // Assuming 'operatore' is in the 4th column (index 3)
-                if (operatoreCell != null && operatoreCell.getStringCellValue().equals(operatore)) {
-                    Cell geonamesCell = row.getCell(2); // Assuming 'geonames' are in the 3rd column (index 2)
-                    if (geonamesCell != null) {
-                        String[] geonamesArray = geonamesCell.getStringCellValue().trim().split(",");
-                        geonames.addAll(Arrays.asList(geonamesArray));
-                    }
-                }
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, operatore);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                geonames.add(rs.getString("geoname"));
             }
-        } catch (IOException e) {
+
+        } catch (SQLException e) {
             e.printStackTrace();
         }
+
         return geonames;
     }
 
     private static boolean isParametroPresente(String operatore, String geoname) {
-        try (FileInputStream fileInputStream = new FileInputStream(XLSX_FILE_PATH);
-             Workbook workbook = new XSSFWorkbook(fileInputStream)) {
-            Sheet sheet = workbook.getSheet("parametri-climatici");
+        String query = "SELECT * FROM parametriclimatici WHERE geoname = ? AND EXISTS "
+                     + "(SELECT 1 FROM centrimonitoraggio WHERE operator_id = ? AND nomecentro = ?)";
 
-            for (Row row : sheet) {
-                Cell operatoreCell = row.getCell(0);
-                Cell geonameCell = row.getCell(1);
-                if (operatoreCell != null && geonameCell != null &&
-                        operatoreCell.getStringCellValue().equals(operatore) &&
-                        geonameCell.getStringCellValue().equals(geoname)) {
-                    return true;
-                }
-            }
-        } catch (IOException e) {
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, geoname);
+            stmt.setString(2, operatore);
+            stmt.setString(3, geoname);
+            ResultSet rs = stmt.executeQuery();
+
+            return rs.next();
+
+        } catch (SQLException e) {
             e.printStackTrace();
         }
+
         return false;
     }
 
     private static void inserisciNuoviParametri(Scanner scanner, String operatore, String geoname) {
-        String[] parametri = {"vento", "umidita", "pressione", "temperatura", "precipitazioni", "altitudine-giacciai", "massa-ghiacciai"};
+        String[] parametri = {"vento", "umidita", "pressione", "temperatura", "precipitazioni", "altitudinegiacciai", "massaghiacciai"};
 
-        try (FileInputStream fileInputStream = new FileInputStream(XLSX_FILE_PATH);
-             Workbook workbook = new XSSFWorkbook(fileInputStream);
-             FileOutputStream fileOutputStream = new FileOutputStream(XLSX_FILE_PATH)) {
+        String insertQuery = "INSERT INTO parametriclimatici (nomecentro, geoname, vento, umidita, pressione, temperatura, precipitazioni, altitudinegiacciai, massaghiacciai) "
+                           + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-            Sheet sheet = workbook.getSheet("parametri-climatici");
-            if (sheet == null) {
-                sheet = workbook.createSheet("parametri-climatici");
-            }
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(insertQuery)) {
 
-            int lastRow = sheet.getLastRowNum() + 1;
-            Row row = sheet.createRow(lastRow);
-
-            row.createCell(0).setCellValue(operatore);
-            row.createCell(1).setCellValue(geoname);
-
+            stmt.setString(1, geoname);
+            stmt.setString(2, geoname);  // assuming geoname is also used as nomecentro
             for (int i = 0; i < parametri.length; i++) {
                 System.out.print(parametri[i] + ": ");
                 String valore = scanner.nextLine();
-                row.createCell(i + 2).setCellValue(valore);
+                stmt.setString(i + 3, valore);
             }
 
-            workbook.write(fileOutputStream);
-        } catch (IOException e) {
+            stmt.executeUpdate();
+
+        } catch (SQLException e) {
             e.printStackTrace();
         }
     }
